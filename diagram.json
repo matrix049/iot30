@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "author": "Smart School IoT",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht1",
+      "top": -60,
+      "left": 220,
+      "attrs": { "temperature": "23", "humidity": "55" }
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir1",
+      "top": 80,
+      "left": 220,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr1",
+      "top": -60,
+      "left": 380,
+      "attrs": { "value": "500" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_ldr",
+      "top": 20,
+      "left": 440,
+      "attrs": { "value": "10000" },
+      "rotate": 90
+    },
+    {
+      "type": "wokwi-analog-joystick",
+      "id": "sound1",
+      "top": 200,
+      "left": 220,
+      "attrs": {},
+      "notes": "Simulate sound sensor (use VRx as analog output)"
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "mq135",
+      "top": 280,
+      "left": 380,
+      "attrs": { "value": "0.3" },
+      "notes": "Simulates MQ-135 air quality sensor"
+    },
+    {
+      "type": "wokwi-ir-receiver",
+      "id": "ir1",
+      "top": 280,
+      "left": 220,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "relay1",
+      "top": 360,
+      "left": 220,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_lock",
+      "top": 360,
+      "left": 380,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_motion",
+      "top": 400,
+      "left": 380,
+      "attrs": { "color": "yellow" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_wifi",
+      "top": 440,
+      "left": 380,
+      "attrs": { "color": "green" }
+    }
+  ],
+  "connections": [
+    ["esp:3V3", "dht1:VCC", "red", []],
+    ["esp:GND.1", "dht1:GND", "black", []],
+    ["esp:D15", "dht1:SDA", "green", []],
+
+    ["esp:3V3", "pir1:VCC", "red", []],
+    ["esp:GND.2", "pir1:GND", "black", []],
+    ["esp:D14", "pir1:OUT", "orange", []],
+
+    ["esp:3V3", "ldr1:VCC", "red", []],
+    ["esp:GND.3", "ldr1:GND", "black", []],
+    ["esp:D34", "ldr1:AO", "blue", []],
+
+    ["esp:D35", "sound1:VRx", "purple", []],
+    ["esp:GND.4", "sound1:GND", "black", []],
+    ["esp:3V3", "sound1:VCC", "red", []],
+
+    ["esp:D32", "mq135:SIG", "cyan", []],
+    ["esp:3V3", "mq135:VCC", "red", []],
+    ["esp:GND.5", "mq135:GND", "black", []],
+
+    ["esp:3V3", "ir1:VCC", "red", []],
+    ["esp:GND.6", "ir1:GND", "black", []],
+    ["esp:D27", "ir1:OUT", "magenta", []],
+
+    ["esp:3V3", "relay1:VCC", "red", []],
+    ["esp:GND.7", "relay1:GND", "black", []],
+    ["esp:D26", "relay1:IN", "brown", []],
+
+    ["esp:D4", "led_lock:A", "red", []],
+    ["led_lock:C", "esp:GND.8", "black", []],
+
+    ["esp:D5", "led_motion:A", "yellow", []],
+    ["led_motion:C", "esp:GND.9", "black", []],
+
+    ["esp:D2", "led_wifi:A", "green", []],
+    ["led_wifi:C", "esp:GND.10", "black", []]
+  ]
+}

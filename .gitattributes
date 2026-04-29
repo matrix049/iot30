@@ -1,0 +1,11 @@
+# Normalize line endings on commit
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binaries
+*.png binary
+*.bin binary
+*.elf binary

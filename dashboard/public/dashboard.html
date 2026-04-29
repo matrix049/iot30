@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart School — Tableau de Bord IoT</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600;700&display=swap');
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2230;
+      --border:    #30363d;
+      --accent:    #58a6ff;
+      --green:     #3fb950;
+      --yellow:    #d29922;
+      --red:       #f85149;
+      --purple:    #bc8cff;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ─── Header ───────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 {
+      font-family: 'Space Mono', monospace;
+      font-size: 1.1rem;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+    header h1 span { color: var(--green); }
+
+    .header-right { display: flex; align-items: center; gap: 1rem; }
+
+    .broker-status {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .alert-badge {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 99px;
+      background: rgba(63,185,80,.12);
+      color: var(--green);
+      border: 1px solid rgba(63,185,80,.3);
+      transition: all .25s;
+    }
+    .alert-badge.warn {
+      background: rgba(210,153,34,.15);
+      color: var(--yellow);
+      border-color: rgba(210,153,34,.4);
+    }
+    .alert-badge.crit {
+      background: rgba(248,81,73,.18);
+      color: var(--red);
+      border-color: rgba(248,81,73,.4);
+      animation: pulse 1.5s infinite;
+    }
+
+    .demo-btn {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.78rem;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
+      background: rgba(88,166,255,.15);
+      color: var(--accent);
+      border: 1px solid rgba(88,166,255,.4);
+      transition: all 0.15s;
+    }
+    .demo-btn:hover { background: rgba(88,166,255,.3); }
+    .demo-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .demo-btn.running {
+      background: rgba(63,185,80,.2);
+      color: var(--green);
+      border-color: rgba(63,185,80,.5);
+    }
+
+    /* ─── KPI strip ────────────────────────────────────────────────── */
+    main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+    }
+    .kpi-card .label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.5rem;
+    }
+    .kpi-card .value {
+      font-family: 'Space Mono', monospace;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .kpi-card .unit {
+      font-size: 1rem;
+      color: var(--muted);
+      margin-left: 0.25rem;
+    }
+    .kpi-card.alerts .value { color: var(--green); }
+    .kpi-card.alerts.warn .value { color: var(--yellow); }
+    .kpi-card.alerts.crit .value { color: var(--red); }
+
+    /* ─── Section title ────────────────────────────────────────────── */
+    .section-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ─── Classroom grid ───────────────────────────────────────────── */
+    .classrooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 1.5rem;
+    }
+    .classroom-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .classroom-card.has-alert { border-color: rgba(248,81,73,.5); }
+    .classroom-card:hover { border-color: var(--accent); }
+    .classroom-card.has-alert:hover { border-color: var(--red); }
+
+    .card-header {
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-header h2 {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.95rem;
+      color: var(--text);
+    }
+    .status-badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .status-badge.online  { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+    .status-badge.offline { background: rgba(248,81,73,.15);  color: var(--red);   border: 1px solid rgba(248,81,73,.3); }
+
+    .sensors-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+    }
+    .sensor-tile {
+      background: var(--surface);
+      padding: 1rem 1.25rem;
+      position: relative;
+    }
+    .sensor-tile .label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .sensor-tile .value {
+      font-family: 'Space Mono', monospace;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+    }
+    .sensor-tile .unit {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-left: 0.25rem;
+    }
+    .sensor-tile.temp  .value { color: var(--text); }
+    .sensor-tile.temp.warn .value { color: var(--yellow); }
+    .sensor-tile.temp.crit .value { color: var(--red); }
+    .sensor-tile.hum   .value { color: var(--text); }
+    .sensor-tile.hum.warn .value { color: var(--yellow); }
+    .sensor-tile.light .value { color: var(--text); }
+    .sensor-tile.sound .value { color: var(--text); }
+    .sensor-tile.sound.warn .value { color: var(--yellow); }
+    .sensor-tile.air   .value { color: var(--green); }
+    .sensor-tile.air.moderate .value { color: var(--yellow); }
+    .sensor-tile.air.poor .value { color: var(--red); }
+
+    .pill {
+      display: inline-block;
+      font-size: 0.68rem;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+    .pill.good     { background: rgba(63,185,80,.15);  color: var(--green);  }
+    .pill.moderate { background: rgba(210,153,34,.15); color: var(--yellow); }
+    .pill.poor     { background: rgba(248,81,73,.15);  color: var(--red);    }
+    .pill.on       { background: rgba(255,123,114,.15); color: #ff7b72; }
+    .pill.off      { background: rgba(139,148,158,.1);  color: var(--muted); }
+
+    .card-footer {
+      padding: 0.75rem 1.25rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .last-update { font-size: 0.7rem; color: var(--muted); }
+
+    .lock-btn, .alarm-btn {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+    }
+    .lock-btn.locked   { background: rgba(248,81,73,.15);  color: var(--red);   border-color: rgba(248,81,73,.4); }
+    .lock-btn.locked:hover   { background: rgba(248,81,73,.3); }
+    .lock-btn.unlocked { background: rgba(63,185,80,.15);  color: var(--green); border-color: rgba(63,185,80,.4); }
+    .lock-btn.unlocked:hover { background: rgba(63,185,80,.3); }
+    .alarm-btn {
+      background: rgba(210,153,34,.15);
+      color: var(--yellow);
+      border-color: rgba(210,153,34,.4);
+      margin-left: 0.4rem;
+    }
+    .alarm-btn:hover  { background: rgba(210,153,34,.3); }
+    .alarm-btn:active { transform: scale(0.97); }
+
+    /* ─── Active alerts panel ─────────────────────────────────────── */
+    .panel {
+      margin-top: 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-header code { color: var(--accent); font-size: 0.72rem; background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+
+    .alert-list { max-height: 220px; overflow-y: auto; }
+
+    .alert-entry {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.78rem;
+    }
+    .alert-entry:last-child { border-bottom: none; }
+    .alert-entry .level {
+      font-family: 'Space Mono', monospace;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      min-width: 75px;
+      text-align: center;
+    }
+    .alert-entry .level.INFO     { background: rgba(88,166,255,.15);  color: var(--accent); }
+    .alert-entry .level.WARNING  { background: rgba(210,153,34,.15); color: var(--yellow); }
+    .alert-entry .level.CRITICAL { background: rgba(248,81,73,.18);  color: var(--red);    }
+    .alert-entry .ts    { color: #4a5360; font-family: 'Space Mono', monospace; min-width: 65px; }
+    .alert-entry .room  { color: var(--accent); font-family: 'Space Mono', monospace; min-width: 100px; }
+    .alert-entry .msg   { color: var(--text); flex: 1; }
+    .alert-empty {
+      padding: 1.5rem 1.25rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-align: center;
+      font-style: italic;
+    }
+
+    /* ─── MQTT log ────────────────────────────────────────────────── */
+    #log-output {
+      padding: 0.75rem 1.25rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      height: 180px;
+      overflow-y: auto;
+      color: var(--muted);
+    }
+    #log-output .entry { margin-bottom: 0.2rem; }
+    #log-output .ts    { color: #30363d; margin-right: 0.6rem; }
+    #log-output .topic { color: var(--accent); }
+    .panel-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.7rem;
+      padding: 2px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Space Mono', monospace;
+    }
+    .panel-btn:hover { color: var(--text); border-color: var(--text); }
+
+    .icon { font-size: 1rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🏫 Smart<span>School</span> — IoT Dashboard</h1>
+  <div class="header-right">
+    <a href="index.html" class="demo-btn" style="text-decoration:none; display:flex; align-items:center; gap:0.4rem;">
+      🏠 Accueil
+    </a>
+    <button class="demo-btn" id="demo-btn" onclick="runDemo()" title="Lance une séquence de démo de 25s">
+      ▶ Démo
+    </button>
+    <div class="alert-badge" id="alert-badge" title="Alertes actives">
+      ⚠ <span id="alert-count">0</span>
+    </div>
+    <div class="broker-status">
+      <div class="dot" id="broker-dot"></div>
+      <span id="broker-label">Connexion MQTT...</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPI cards ─────────────────────────────────────────── -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="label">Salles actives</div>
+      <div class="value"><span id="kpi-rooms">0</span> <span class="unit">/ <span id="kpi-rooms-total">0</span></span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Température moy.</div>
+      <div class="value"><span id="kpi-temp">--</span><span class="unit">°C</span></div>
+    </div>
+    <div class="kpi-card alerts" id="kpi-alerts-card">
+      <div class="label">Alertes actives</div>
+      <div class="value" id="kpi-alerts">0</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Élèves détectés</div>
+      <div class="value" id="kpi-students">0</div>
+    </div>
+  </div>
+
+  <!-- Classrooms ───────────────────────────────────────── -->
+  <p class="section-title">Salles de Classe — État en Temps Réel</p>
+  <div class="classrooms-grid" id="classrooms-grid">
+    <p style="color:var(--muted);font-size:.85rem">En attente des données ESP32...</p>
+  </div>
+
+  <!-- Active alerts ────────────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>⚠ Alertes actives — auto-effacées quand la valeur revient à la normale</span>
+      <span><code>PUT /api/thresholds</code> pour configurer</span>
+    </div>
+    <div id="active-alerts" class="alert-list">
+      <div class="alert-empty">Aucune alerte active.</div>
+    </div>
+  </div>
+
+  <!-- MQTT log ─────────────────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>📡 Journal MQTT</span>
+      <span style="display:flex;gap:.5rem;align-items:center">
+        <input id="log-filter" type="text" placeholder="filtre (ex: classroom1/sound)"
+               style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                      padding:3px 8px;border-radius:4px;font-family:'Space Mono',monospace;
+                      font-size:.7rem;width:220px"
+               oninput="applyLogFilter()">
+        <button class="panel-btn" onclick="togglePauseLog()" id="log-pause-btn">Pause</button>
+        <button class="panel-btn" onclick="clearLog()">Effacer</button>
+      </span>
+    </div>
+    <div id="log-output"></div>
+  </div>
+
+</main>
+
+<script>
+  // ── Known classroom IDs (filter out broker ghosts) ───────────────────
+  const KNOWN_ROOMS = new Set(["classroom1", "classroom2", "classroom3", "classroom4"]);
+
+  const socket    = io();
+  const grid      = document.getElementById("classrooms-grid");
+  const logEl     = document.getElementById("log-output");
+  const activeEl  = document.getElementById("active-alerts");
+  const badgeEl   = document.getElementById("alert-badge");
+  const countEl   = document.getElementById("alert-count");
+  const kpiCard   = document.getElementById("kpi-alerts-card");
+
+  const state         = {};
+  const activeAlerts  = {}; // key = classroom:sensor → alert
+
+  // ── Socket events ────────────────────────────────────────────────────
+  socket.on("connect", () => {
+    document.getElementById("broker-dot").style.background = "var(--green)";
+    document.getElementById("broker-label").textContent = "MQTT connecté";
+  });
+  socket.on("disconnect", () => {
+    document.getElementById("broker-dot").style.background = "var(--red)";
+    document.getElementById("broker-label").textContent = "Déconnecté";
+  });
+
+  socket.on("full_state", (data) => {
+    Object.keys(data).forEach((id) => {
+      if (KNOWN_ROOMS.has(id)) state[id] = data[id];
+    });
+    renderAll();
+    updateKPIs();
+  });
+
+  socket.on("sensor_update", ({ classroom, sensor, data: payload, state: roomState }) => {
+    if (!KNOWN_ROOMS.has(classroom)) return; // Ignore broker ghosts
+    state[classroom] = roomState;
+    renderRoom(classroom);
+    logEntry(classroom, sensor, payload);
+    updateKPIs();
+  });
+
+  socket.on("active_alerts_snapshot", (alerts) => {
+    activeEl.innerHTML = "";
+    Object.keys(activeAlerts).forEach((k) => delete activeAlerts[k]);
+    if (Array.isArray(alerts)) alerts.forEach(addOrUpdateAlert);
+    refreshActivePanel();
+  });
+
+  socket.on("alert", (alert) => {
+    addOrUpdateAlert(alert);
+    refreshActivePanel();
+    flashRoom(alert.classroom);
+  });
+
+  socket.on("alert_cleared", (cleared) => {
+    const key = cleared.classroom + ":" + cleared.sensor;
+    delete activeAlerts[key];
+    refreshActivePanel();
+  });
+
+  // ── Render classrooms ────────────────────────────────────────────────
+  function renderAll() {
+    grid.innerHTML = "";
+    if (Object.keys(state).length === 0) {
+      grid.innerHTML = '<p style="color:var(--muted);font-size:.85rem">En attente des données ESP32...</p>';
+      return;
+    }
+    Object.keys(state).sort().forEach(renderRoom);
+  }
+
+  function renderRoom(id) {
+    const r = state[id];
+    if (!r) return;
+
+    let card = document.getElementById("card-" + id);
+    if (!card) {
+      // Remove placeholder text if any
+      if (grid.querySelector("p")) grid.innerHTML = "";
+      card = document.createElement("div");
+      card.id = "card-" + id;
+      grid.appendChild(card);
+    }
+    card.className = "classroom-card" + (hasAlertForRoom(id) ? " has-alert" : "");
+
+    const airQ      = r.air_quality || {};
+    const airCls    = airQ.quality === "GOOD"      ? "good"
+                    : airQ.quality === "MODERATE"  ? "moderate"
+                    : airQ.quality === "POOR"      ? "poor"
+                    : "";
+    const tempCls   = (r.temperature !== null && r.temperature > 28)  ? "warn"
+                    : (r.temperature !== null && r.temperature > 32)  ? "crit"
+                    : "";
+    const humCls    = (r.humidity !== null && (r.humidity > 80 || r.humidity < 20)) ? "warn" : "";
+    const soundCls  = (r.sound !== null && r.sound > 80) ? "warn" : "";
+    const locked    = r.locked;
+    const ts        = r.lastUpdate ? new Date(r.lastUpdate).toLocaleTimeString("fr-FR") : "--";
+    const roomNum   = id.replace("classroom","");
+
+    card.innerHTML = `
+      <div class="card-header">
+        <h2>📚 Salle ${roomNum}</h2>
+        <span class="status-badge ${r.online ? "online":"offline"}">${r.online ? "En ligne":"Hors ligne"}</span>
+      </div>
+      <div class="sensors-grid">
+        <div class="sensor-tile temp ${tempCls}">
+          <div class="label"><span class="icon">🌡️</span> Température</div>
+          <div class="value">${r.temperature !== null && r.temperature !== undefined ? Number(r.temperature).toFixed(1) : "--"}<span class="unit">°C</span></div>
+        </div>
+        <div class="sensor-tile hum ${humCls}">
+          <div class="label"><span class="icon">💧</span> Humidité</div>
+          <div class="value">${r.humidity !== null && r.humidity !== undefined ? Number(r.humidity).toFixed(0) : "--"}<span class="unit">%</span></div>
+        </div>
+        <div class="sensor-tile light">
+          <div class="label"><span class="icon">💡</span> Luminosité</div>
+          <div class="value">${r.light !== null && r.light !== undefined ? r.light : "--"}<span class="unit">%</span></div>
+        </div>
+        <div class="sensor-tile sound ${soundCls}">
+          <div class="label"><span class="icon">🔊</span> Bruit</div>
+          <div class="value">${r.sound !== null && r.sound !== undefined ? r.sound : "--"}<span class="unit">dB</span></div>
+        </div>
+        <div class="sensor-tile air ${airCls}">
+          <div class="label"><span class="icon">🌿</span> Qualité air</div>
+          <div class="value" style="font-size:1.1rem">
+            ${airQ.ppm || "--"}<span class="unit">ppm</span>
+            <div style="margin-top:.3rem"><span class="pill ${airCls || 'off'}">${airQ.quality || "--"}</span></div>
+          </div>
+        </div>
+        <div class="sensor-tile">
+          <div class="label"><span class="icon">👥</span> Élèves / Mvt</div>
+          <div class="value" style="font-size:1.1rem">
+            ${r.presence !== undefined && r.presence !== null ? r.presence : 0}
+            <span class="pill ${r.motion ? "on":"off"}" style="margin-left:.3rem;font-size:.62rem">${r.motion ? "MVT" : "—"}</span>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span class="last-update">⏱ ${ts}</span>
+        <div>
+          <button class="lock-btn ${locked ? "locked":"unlocked"}"
+                  onclick="toggleLock('${id}', ${!locked})">
+            ${locked ? "🔒 Verrouillée" : "🔓 Ouverte"}
+          </button>
+          <button class="alarm-btn"
+                  onclick="triggerAlarm('${id}')"
+                  title="Fait clignoter la LED rouge sur l'ESP32">
+            🔔
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function flashRoom(id) {
+    const card = document.getElementById("card-" + id);
+    if (!card) return;
+    card.style.transition = "box-shadow 0.4s";
+    card.style.boxShadow = "0 0 0 2px rgba(248,81,73,.5)";
+    setTimeout(() => { card.style.boxShadow = ""; }, 1200);
+  }
+
+  // ── KPI computation ─────────────────────────────────────────────────
+  function updateKPIs() {
+    const rooms      = Object.values(state);
+    const knownRooms = rooms.filter((r) => KNOWN_ROOMS.has(r.id));
+    const online     = knownRooms.filter((r) => r.online).length;
+    const total      = knownRooms.length;
+
+    const temps = knownRooms
+      .map((r) => r.temperature)
+      .filter((t) => typeof t === "number" && !Number.isNaN(t));
+    const avgTemp = temps.length ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : "--";
+
+    const students = knownRooms
+      .map((r) => r.presence || 0)
+      .reduce((a, b) => a + b, 0);
+
+    document.getElementById("kpi-rooms").textContent       = online;
+    document.getElementById("kpi-rooms-total").textContent = total;
+    document.getElementById("kpi-temp").textContent        = avgTemp;
+    document.getElementById("kpi-students").textContent    = students;
+  }
+
+  // ── Active alerts ───────────────────────────────────────────────────
+  function addOrUpdateAlert(alert) {
+    const key = alert.classroom + ":" + alert.sensor;
+    activeAlerts[key] = alert;
+  }
+
+  function hasAlertForRoom(id) {
+    return Object.values(activeAlerts).some((a) => a.classroom === id);
+  }
+
+  function refreshActivePanel() {
+    const list = Object.values(activeAlerts);
+    const count = list.length;
+    countEl.textContent = count;
+
+    // Badge color reflects highest level
+    const order = { INFO: 1, WARNING: 2, CRITICAL: 3 };
+    let highest = 0;
+    list.forEach((a) => { if ((order[a.level] || 0) > highest) highest = order[a.level]; });
+    badgeEl.classList.remove("warn", "crit");
+    kpiCard.classList.remove("warn", "crit");
+    if (highest >= 3)      { badgeEl.classList.add("crit"); kpiCard.classList.add("crit"); }
+    else if (highest >= 1) { badgeEl.classList.add("warn"); kpiCard.classList.add("warn"); }
+
+    document.getElementById("kpi-alerts").textContent = count;
+
+    // Render list
+    if (count === 0) {
+      activeEl.innerHTML = '<div class="alert-empty">Aucune alerte active.</div>';
+    } else {
+      activeEl.innerHTML = "";
+      list.sort((a, b) => (order[b.level] || 0) - (order[a.level] || 0)).forEach((a) => {
+        const ts = a.ts ? new Date(a.ts) : new Date();
+        const div = document.createElement("div");
+        div.className = "alert-entry";
+        div.innerHTML = `
+          <span class="level ${a.level}">${a.level}</span>
+          <span class="ts">${ts.toLocaleTimeString("fr-FR")}</span>
+          <span class="room">${a.classroom}</span>
+          <span class="msg">${a.message}</span>
+        `;
+        activeEl.appendChild(div);
+      });
+    }
+
+    // Update affected room cards (alert ring)
+    Object.values(state).forEach((r) => {
+      const card = document.getElementById("card-" + r.id);
+      if (card) card.classList.toggle("has-alert", hasAlertForRoom(r.id));
+    });
+  }
+
+  // ── Lock / Alarm commands ───────────────────────────────────────────
+  async function toggleLock(classroomId, lockValue) {
+    await fetch(`/api/classrooms/${classroomId}/lock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lock: lockValue }),
+    });
+  }
+
+  async function triggerAlarm(classroomId) {
+    await fetch(`/api/classrooms/${classroomId}/alarm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trigger: true }),
+    });
+  }
+
+  async function runDemo() {
+    const btn = document.getElementById("demo-btn");
+    btn.disabled = true;
+    btn.classList.add("running");
+    btn.textContent = "▶ Démo en cours...";
+    try {
+      await fetch("/api/demo/run", { method: "POST" });
+    } catch (e) {}
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.classList.remove("running");
+      btn.textContent = "▶ Démo";
+    }, 26000);
+  }
+
+  // ── MQTT log ────────────────────────────────────────────────────────
+  let logPaused = false;
+
+  function logEntry(classroom, sensor, payload) {
+    if (logPaused) return;
+    const ts = new Date().toLocaleTimeString("fr-FR");
+    const topic = `smartschool/${classroom}/${sensor}`;
+    const filter = document.getElementById("log-filter").value.trim().toLowerCase();
+    if (filter && !topic.toLowerCase().includes(filter)) return;
+    const line = document.createElement("div");
+    line.className = "entry";
+    line.dataset.topic = topic;
+    line.innerHTML = `<span class="ts">${ts}</span><span class="topic">${topic}</span> → ${JSON.stringify(payload)}`;
+    logEl.prepend(line);
+    while (logEl.children.length > 80) logEl.removeChild(logEl.lastChild);
+  }
+
+  function applyLogFilter() {
+    const filter = document.getElementById("log-filter").value.trim().toLowerCase();
+    Array.from(logEl.children).forEach((el) => {
+      const t = (el.dataset.topic || "").toLowerCase();
+      el.style.display = !filter || t.includes(filter) ? "" : "none";
+    });
+  }
+
+  function togglePauseLog() {
+    logPaused = !logPaused;
+    document.getElementById("log-pause-btn").textContent = logPaused ? "Reprendre" : "Pause";
+  }
+
+  function clearLog() { logEl.innerHTML = ""; }
+</script>
+
+</body>
+</html>
